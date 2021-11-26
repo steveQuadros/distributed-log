@@ -34,6 +34,7 @@ func TestAgent(t *testing.T) {
 		KeyFile:       config.RootClientKeyFile,
 		CAFile:        config.CAFile,
 		ServerAddress: "127.0.0.1",
+		Server:        false,
 	})
 	require.NoError(t, err)
 
@@ -56,6 +57,7 @@ func TestAgent(t *testing.T) {
 
 		agent, err := agent.New(agent.Config{
 			NodeName:        fmt.Sprintf("%d", i),
+			Bootstrap:       i == 0,
 			StartJoinAddrs:  startJoinAddrs,
 			BindAddr:        bindAddr,
 			RPCPort:         rpcPort,
@@ -76,6 +78,8 @@ func TestAgent(t *testing.T) {
 			require.NoError(t, os.RemoveAll(agent.Config.DataDir))
 		}
 	}()
+
+	// wait until agents have joined cluster
 	time.Sleep(3 * time.Second)
 
 	leaderClient := client(t, agents[0], peerTLSConfig)
@@ -95,7 +99,9 @@ func TestAgent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, consumeResponse.Record.Value, []byte("foo"))
 
+	// wait until replication has finished
 	time.Sleep(3 * time.Second)
+
 	followerClient := client(t, agents[1], peerTLSConfig)
 	consumeResponse, err = followerClient.Consume(
 		context.Background(),
@@ -106,14 +112,17 @@ func TestAgent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, consumeResponse.Record.Value, []byte("foo"))
 
-	// consumeResponse, err = leaderClient.Consume(context.Background(), &api.ConsumeRequest{
-	// 	Offset: produceResponse.Offset + 1,
-	// })
-	// require.Nil(t, consumeResponse)
-	// require.Error(t, err)
-	// got := grpc.Code(err)
-	// want := grpc.Code(api.ErrOffsetOutOfRange{}.GRPCStatus().Err())
-	// require.Equal(t, got, want)
+	consumeResponse, err = leaderClient.Consume(
+		context.Background(),
+		&api.ConsumeRequest{
+			Offset: produceResponse.Offset + 1,
+		},
+	)
+	require.Nil(t, consumeResponse)
+	require.Error(t, err)
+	got := grpc.Code(err)
+	want := grpc.Code(api.ErrOffsetOutOfRange{}.GRPCStatus().Err())
+	require.Equal(t, got, want)
 }
 
 func client(
@@ -125,10 +134,7 @@ func client(
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(tlsCreds)}
 	rpcAddr, err := agent.Config.RPCAddr()
 	require.NoError(t, err)
-	conn, err := grpc.Dial(fmt.Sprintf(
-		"%s",
-		rpcAddr,
-	), opts...)
+	conn, err := grpc.Dial(rpcAddr, opts...)
 	require.NoError(t, err)
 	client := api.NewLogClient(conn)
 	return client
