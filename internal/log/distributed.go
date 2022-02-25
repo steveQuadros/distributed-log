@@ -48,7 +48,7 @@ func (l *DistributedLog) setupLog(dataDir string) error {
 func (l *DistributedLog) setupRaft(dataDir string) error {
 	fsm := &fsm{log: l.log}
 
-	logDir := filepath.Join(dataDir, "raft", ";log")
+	logDir := filepath.Join(dataDir, "raft", "log")
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return err
 	}

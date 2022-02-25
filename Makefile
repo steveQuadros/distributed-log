@@ -51,3 +51,7 @@ auth:
 test: auth
 	go test -race ./...
 
+TAG ?= 0.0.1
+
+build-docker:
+	docker build -t github.com/stevequadros/proglog:$(TAG) .test
